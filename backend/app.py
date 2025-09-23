@@ -10,22 +10,9 @@ from src.pipeline import process_document_pair, clean_text
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend-backend communication
 
-# === Global model placeholders ===
-bert_model = None
-svm_model = None
-
-# === Lazy loaders ===
-def get_bert_model():
-    global bert_model
-    if bert_model is None:
-        bert_model = SentenceTransformer("all-MiniLM-L6-v2")
-    return bert_model
-
-def get_svm_model():
-    global svm_model
-    if svm_model is None:
-        svm_model = joblib.load("models/svm/svm_ai_detector.pkl")
-    return svm_model
+# === Eagerly load models at startup ===
+bert_model = SentenceTransformer("all-MiniLM-L6-v2")
+svm_model = joblib.load("models/svm/svm_ai_detector.pkl")
 
 # === Utility: Extract raw text from uploaded file ===
 def extract_text(file):
@@ -92,7 +79,7 @@ def check_against_corpus():
 
     try:
         text = clean_text(extract_text(file))
-        user_embedding = get_bert_model().encode(text)
+        user_embedding = bert_model.encode(text)
 
         with open("models/embeddings/corpus_embeddings.pkl", "rb") as f:
             filenames, corpus_embeddings = pickle.load(f)
@@ -128,7 +115,7 @@ def smart_check():
     try:
         text = clean_text(extract_text(file))
         filename = secure_filename(file.filename)
-        new_embedding = get_bert_model().encode(text)
+        new_embedding = bert_model.encode(text)
 
         corpus_path = "models/embeddings/corpus_embeddings.pkl"
         if os.path.exists(corpus_path):
@@ -184,9 +171,8 @@ def detect_ai():
 
     try:
         text = extract_text(file)
-        model = get_svm_model()
-        prediction = model.predict([text])[0]
-        confidence = model.predict_proba([text])[0][1]
+        prediction = svm_model.predict([text])[0]
+        confidence = svm_model.predict_proba([text])[0][1]
 
         return jsonify({
             "ai_score": float(round(confidence, 4)),
