@@ -10,9 +10,22 @@ from src.pipeline import process_document_pair, clean_text
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend-backend communication
 
-# === Eagerly load models at startup ===
-bert_model = SentenceTransformer("all-MiniLM-L6-v2")
-svm_model = joblib.load("models/svm/svm_ai_detector.pkl")
+# === Global model placeholders ===
+bert_model = None
+svm_model = None
+
+# === Lazy loaders ===
+def get_bert_model():
+    global bert_model
+    if bert_model is None:
+        bert_model = SentenceTransformer("all-MiniLM-L6-v2")
+    return bert_model
+
+def get_svm_model():
+    global svm_model
+    if svm_model is None:
+        svm_model = joblib.load("models/svm/svm_ai_detector.pkl")
+    return svm_model
 
 # === Utility: Extract raw text from uploaded file ===
 def extract_text(file):
@@ -79,18 +92,16 @@ def check_against_corpus():
 
     try:
         text = clean_text(extract_text(file))
-        user_embedding = bert_model.encode(text)
+        user_embedding = get_bert_model().encode(text)
 
-        # Load existing corpus
         with open("models/embeddings/corpus_embeddings.pkl", "rb") as f:
             filenames, corpus_embeddings = pickle.load(f)
 
-        # Calculate cosine similarity with all documents
         scores = np.dot(corpus_embeddings, user_embedding) / (
             np.linalg.norm(corpus_embeddings, axis=1) * np.linalg.norm(user_embedding)
         )
 
-        top_k = 3  # Return top 3 matches
+        top_k = 3
         top_indices = np.argsort(scores)[::-1][:top_k]
 
         results = [
@@ -117,9 +128,8 @@ def smart_check():
     try:
         text = clean_text(extract_text(file))
         filename = secure_filename(file.filename)
-        new_embedding = bert_model.encode(text)
+        new_embedding = get_bert_model().encode(text)
 
-        # Load or initialize corpus
         corpus_path = "models/embeddings/corpus_embeddings.pkl"
         if os.path.exists(corpus_path):
             with open(corpus_path, "rb") as f:
@@ -127,7 +137,6 @@ def smart_check():
         else:
             filenames, embeddings = [], np.empty((0, 384))
 
-        # Compare to existing corpus
         if len(embeddings) > 0:
             scores = np.dot(embeddings, new_embedding) / (
                 np.linalg.norm(embeddings, axis=1) * np.linalg.norm(new_embedding)
@@ -138,7 +147,6 @@ def smart_check():
             max_score = 0.0
             most_similar_doc = None
 
-        # Build response
         response = {
             "similarity_score": float(round(max_score, 4)),
             "verdict": interpret_score(max_score),
@@ -146,7 +154,6 @@ def smart_check():
             "added_to_corpus": False
         }
 
-        # If document is original enough, save to corpus
         if max_score < 0.8:
             hash_name = hashlib.sha1(text.encode()).hexdigest()[:10]
             new_filename = f"{hash_name}_{filename}"
@@ -177,8 +184,9 @@ def detect_ai():
 
     try:
         text = extract_text(file)
-        prediction = svm_model.predict([text])[0]
-        confidence = svm_model.predict_proba([text])[0][1]
+        model = get_svm_model()
+        prediction = model.predict([text])[0]
+        confidence = model.predict_proba([text])[0][1]
 
         return jsonify({
             "ai_score": float(round(confidence, 4)),
@@ -192,5 +200,5 @@ def detect_ai():
 
 # === Start the server ===
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Render provides PORT
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
