@@ -1,13 +1,10 @@
 #!/bin/bash
 set -e
 
-# Install python & pip
-apt-get update && apt-get install -y python3 python3-pip
-
 cd backend
 
-python3 -m venv .venv
-source .venv/bin/activate
+# Install dependencies into user site-packages
+pip install --user -r requirements.txt
 
-pip3 install -r requirements.txt
-exec .venv/bin/gunicorn app:app --bind 0.0.0.0:$PORT
+# Run the app with Gunicorn from user-installed location
+~/.local/bin/gunicorn app:app --bind 0.0.0.0:$PORT
