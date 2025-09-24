@@ -18,7 +18,7 @@ svm_model = None
 def get_bert_model():
     global bert_model
     if bert_model is None:
-        bert_model = SentenceTransformer("all-MiniLM-L6-v2")
+        bert_model = SentenceTransformer("models/fine_tuned_MiniLM")
     return bert_model
 
 def get_svm_model():
@@ -83,40 +83,6 @@ def check_plagiarism():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-# === Route: Compare one file against saved corpus ===
-@app.route("/check-corpus", methods=["POST"])
-def check_against_corpus():
-    file = request.files.get("file")
-    if not file:
-        return jsonify({"error": "File is required"}), 400
-
-    try:
-        text = clean_text(extract_text(file))
-        user_embedding = get_bert_model().encode(text)
-
-        with open("models/embeddings/corpus_embeddings.pkl", "rb") as f:
-            filenames, corpus_embeddings = pickle.load(f)
-
-        scores = np.dot(corpus_embeddings, user_embedding) / (
-            np.linalg.norm(corpus_embeddings, axis=1) * np.linalg.norm(user_embedding)
-        )
-
-        top_k = 3
-        top_indices = np.argsort(scores)[::-1][:top_k]
-
-        results = [
-            {
-                "document": filenames[i],
-                "similarity_score": float(round(scores[i], 4)),
-                "verdict": interpret_score(scores[i])
-            }
-            for i in top_indices
-        ]
-
-        return jsonify({"matches": results})
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
 
 # === Route: Compare file + Add to corpus if unique ===
 @app.route("/smart-check", methods=["POST"])
