@@ -1,17 +1,21 @@
 #!/bin/bash
 set -e
 
-# Make sure we are in backend folder
 cd backend
 
-# Install Python and pip (if not available)
-if ! command -v python3 &> /dev/null
-then
-  apt-get update && apt-get install -y python3 python3-pip
+# Create virtual environment if it doesn't exist
+if [ ! -d "venv" ]; then
+    python3 -m venv venv
 fi
 
-# Install requirements
-pip3 install --no-cache-dir -r requirements.txt
+# Activate venv
+. venv/bin/activate
 
-# Start the Flask app with Gunicorn
+# Upgrade pip safely
+pip install --upgrade pip
+
+# Install dependencies inside venv
+pip install --no-cache-dir -r requirements.txt
+
+# Run the app with Gunicorn
 exec gunicorn app:app --bind 0.0.0.0:$PORT
